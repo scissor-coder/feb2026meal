@@ -1,0 +1,346 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>Meal Tracker</title>
+    
+    <!-- Tailwind CSS -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    
+    <!-- Google Fonts: Hind Siliguri -->
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Hind+Siliguri:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+    
+    <!-- Icons (Lucide) -->
+    <script src="https://unpkg.com/lucide@latest"></script>
+
+    <style>
+        body {
+            font-family: 'Hind Siliguri', sans-serif;
+            -webkit-tap-highlight-color: transparent;
+        }
+        
+        /* Smooth fade animation for content switching */
+        .fade-in {
+            animation: fadeIn 0.4s ease-out forwards;
+            opacity: 0;
+        }
+        
+        @keyframes fadeIn {
+            from { opacity: 0; transform: translateY(10px); }
+            to { opacity: 1; transform: translateY(0); }
+        }
+
+        /* Custom Scrollbar */
+        ::-webkit-scrollbar {
+            width: 6px;
+            height: 6px;
+        }
+        ::-webkit-scrollbar-track {
+            background: #f1f1f1; 
+        }
+        ::-webkit-scrollbar-thumb {
+            background: #cbd5e1; 
+            border-radius: 3px;
+        }
+        ::-webkit-scrollbar-thumb:hover {
+            background: #94a3b8; 
+        }
+
+        /* PB Safe for iPhone bottom bar */
+        .pb-safe {
+            padding-bottom: env(safe-area-inset-bottom);
+        }
+    </style>
+</head>
+<body class="bg-slate-50 text-slate-800 h-full min-h-screen relative selection:bg-indigo-100">
+
+    <!-- Header -->
+    <header class="bg-white/80 backdrop-blur-md sticky top-0 z-40 border-b border-slate-200 px-6 py-4">
+        <div class="flex items-center justify-between max-w-2xl mx-auto">
+            <div>
+                <h1 id="page-title" class="text-xl font-bold text-slate-800 tracking-tight">Loading...</h1>
+                <p id="current-date" class="text-xs text-slate-500 font-medium mt-0.5">Fetching data...</p>
+            </div>
+            <div id="loading-spinner" class="hidden">
+                <svg class="animate-spin h-5 w-5 text-indigo-600" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+                    <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
+                    <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                </svg>
+            </div>
+        </div>
+    </header>
+
+    <!-- Main Content Area -->
+    <main class="max-w-2xl mx-auto px-4 pt-4 pb-24 min-h-[80vh]">
+        <div id="content-area" class="w-full">
+            <!-- Dynamic Content Injected Here -->
+        </div>
+    </main>
+
+    <!-- Bottom Navigation -->
+    <nav class="fixed bottom-0 left-0 right-0 bg-white border-t border-slate-200 pb-safe z-50 shadow-[0_-4px_6px_-1px_rgba(0,0,0,0.05)]">
+        <div class="max-w-2xl mx-auto flex justify-around items-center h-16">
+            <!-- Nav 1: Delings -->
+            <button onclick="switchTab('delings')" id="btn-delings" class="nav-btn w-full h-full flex flex-col items-center justify-center space-y-1 transition-colors duration-200 text-slate-400 hover:bg-slate-50 active:bg-slate-100 group">
+                <div class="relative p-1 rounded-xl transition-all duration-300 group-hover:-translate-y-1">
+                    <i data-lucide="layout-grid" class="w-6 h-6"></i>
+                </div>
+                <span class="text-xs font-semibold">Delings</span>
+            </button>
+
+            <!-- Nav 2: Reports -->
+            <button onclick="switchTab('reports')" id="btn-reports" class="nav-btn w-full h-full flex flex-col items-center justify-center space-y-1 transition-colors duration-200 text-slate-400 hover:bg-slate-50 active:bg-slate-100 group">
+                <div class="relative p-1 rounded-xl transition-all duration-300 group-hover:-translate-y-1">
+                    <i data-lucide="clipboard-list" class="w-6 h-6"></i>
+                </div>
+                <span class="text-xs font-semibold">Reports</span>
+            </button>
+        </div>
+    </nav>
+
+    <script>
+        // Configuration
+        const SHEET_ID = '2PACX-1vSfUBJWuWm_7glPm5PI7B7REUicGre1uTRSfOhkwNbPF89smWBg98VfX0_blsAb8eB9k5p-znfcjD8U';
+        const CSV_URL = `https://docs.google.com/spreadsheets/d/e/${SHEET_ID}/pub?output=csv`;
+        let currentTab = 'delings';
+
+        // Initialize Icons
+        lucide.createIcons();
+
+        // Helper: Format Date
+        const formatDate = () => {
+            const options = { weekday: 'short', year: 'numeric', month: 'short', day: 'numeric' };
+            return new Date().toLocaleDateString('en-US', options);
+        };
+        document.getElementById('current-date').textContent = formatDate();
+
+        // Parse CSV Text to Array of Objects
+        function parseCSV(text) {
+            const rows = text.trim().split('\n').map(row => row.split(','));
+            const headers = rows[0].map(h => h.trim());
+            const data = rows.slice(1).map(row => {
+                let obj = {};
+                row.forEach((cell, i) => {
+                    // Handle quoted CSV values if necessary, simplistic approach here
+                    obj[headers[i]] = cell ? cell.trim().replace(/^"|"$/g, '') : '';
+                });
+                return obj;
+            });
+            return { headers, data };
+        }
+
+        // Fetch Data Function
+        async function fetchSheetData() {
+            const spinner = document.getElementById('loading-spinner');
+            spinner.classList.remove('hidden');
+            
+            try {
+                // Add timestamp to prevent caching
+                const response = await fetch(`${CSV_URL}&t=${Date.now()}`);
+                if (!response.ok) throw new Error('Network response was not ok');
+                const text = await response.text();
+                return parseCSV(text);
+            } catch (error) {
+                console.error('Error fetching data:', error);
+                return null;
+            } finally {
+                spinner.classList.add('hidden');
+            }
+        }
+
+        // Render Nav 1: Delings
+        function renderDelings(sheetData) {
+            const container = document.getElementById('content-area');
+            document.getElementById('page-title').textContent = 'Daily Delings';
+            
+            if (!sheetData || !sheetData.data.length) {
+                container.innerHTML = `<div class="text-center p-8 text-slate-400">No data available</div>`;
+                return;
+            }
+
+            // Extract Header 6 (mealRattt) - Assuming first row contains the current rate or it's a list
+            // We'll take the first non-empty value found in the 'mealRattt' column for the "Rate" card
+            const rateValue = sheetData.data.find(row => row.mealRattt)?.mealRattt || '0.00';
+            
+            // Extract Header 5 (takeName) for the list
+            const takeList = sheetData.data.filter(row => row.takeName);
+
+            let html = `
+                <div class="fade-in space-y-6">
+                    <!-- Section 1: Meal Rate (Header 6) -->
+                    <div class="bg-gradient-to-br from-indigo-500 to-purple-600 rounded-2xl p-6 text-white shadow-lg shadow-indigo-200 transform transition-all hover:scale-[1.01]">
+                        <div class="flex items-center justify-between mb-2">
+                            <h2 class="text-indigo-100 font-medium text-sm uppercase tracking-wider">Meal Rate</h2>
+                            <i data-lucide="trending-up" class="w-5 h-5 text-indigo-200"></i>
+                        </div>
+                        <div class="flex items-baseline gap-1">
+                            <span class="text-4xl font-bold font-mono tracking-tight">${rateValue}</span>
+                            <span class="text-indigo-200 text-sm">BDT</span>
+                        </div>
+                        <p class="text-indigo-100/80 text-xs mt-3 bg-white/10 inline-block px-2 py-1 rounded-lg">
+                            Updated today
+                        </p>
+                    </div>
+
+                    <!-- Section 2: Take Name List (Header 5) -->
+                    <div>
+                        <div class="flex items-center justify-between mb-4 px-1">
+                            <h3 class="text-lg font-bold text-slate-800">Recent Takers</h3>
+                            <span class="text-xs font-semibold bg-slate-100 text-slate-500 px-2 py-1 rounded-full">${takeList.length} Entries</span>
+                        </div>
+                        
+                        <div class="space-y-3">
+                            ${takeList.map((item, index) => `
+                                <div class="bg-white p-4 rounded-xl border border-slate-100 shadow-sm flex items-center gap-4 hover:border-indigo-100 transition-colors">
+                                    <div class="h-10 w-10 rounded-full bg-indigo-50 flex items-center justify-center text-indigo-600 font-bold text-sm shrink-0">
+                                        ${item.takeName.charAt(0).toUpperCase()}
+                                    </div>
+                                    <div class="flex-1 min-w-0">
+                                        <p class="text-sm font-semibold text-slate-800 truncate">${item.takeName}</p>
+                                        <p class="text-xs text-slate-400 mt-0.5">Entry #${index + 1}</p>
+                                    </div>
+                                    <div class="text-right">
+                                        <span class="inline-flex items-center justify-center h-6 w-6 rounded-full bg-green-50 text-green-600">
+                                            <i data-lucide="check" class="w-3.5 h-3.5"></i>
+                                        </span>
+                                    </div>
+                                </div>
+                            `).join('')}
+                        </div>
+                    </div>
+                </div>
+            `;
+            
+            container.innerHTML = html;
+            lucide.createIcons();
+        }
+
+        // Render Nav 2: Reports
+        function renderReports(sheetData) {
+            const container = document.getElementById('content-area');
+            document.getElementById('page-title').textContent = 'Meal Reports';
+
+            if (!sheetData || !sheetData.data.length) {
+                container.innerHTML = `<div class="text-center p-8 text-slate-400">No report data found</div>`;
+                return;
+            }
+
+            // Headers 1-4: Name, Total Meal, Given, Wasted
+            // We filter rows that have a Name to avoid empty rows
+            const reportData = sheetData.data.filter(row => row.Name);
+
+            let html = `
+                <div class="fade-in">
+                    <div class="bg-white rounded-2xl shadow-sm border border-slate-200 overflow-hidden">
+                        <div class="overflow-x-auto">
+                            <table class="w-full text-left text-sm">
+                                <thead class="bg-slate-50 border-b border-slate-200">
+                                    <tr>
+                                        <th class="px-5 py-4 font-semibold text-slate-600">Name</th>
+                                        <th class="px-5 py-4 font-semibold text-slate-600 text-center">Total</th>
+                                        <th class="px-5 py-4 font-semibold text-slate-600 text-center">Given</th>
+                                        <th class="px-5 py-4 font-semibold text-slate-600 text-center">Wasted</th>
+                                    </tr>
+                                </thead>
+                                <tbody class="divide-y divide-slate-100">
+                                    ${reportData.map(row => `
+                                        <tr class="hover:bg-slate-50/50 transition-colors">
+                                            <td class="px-5 py-4 font-medium text-slate-800 whitespace-nowrap">
+                                                ${row.Name}
+                                            </td>
+                                            <td class="px-5 py-4 text-center">
+                                                <span class="bg-blue-50 text-blue-700 px-2 py-1 rounded text-xs font-bold">${row['Total Meal'] || 0}</span>
+                                            </td>
+                                            <td class="px-5 py-4 text-center text-slate-600">
+                                                ${row.Given || 0}
+                                            </td>
+                                            <td class="px-5 py-4 text-center">
+                                                ${(row.Wasted && row.Wasted !== '0') 
+                                                    ? `<span class="text-red-500 font-medium">${row.Wasted}</span>` 
+                                                    : `<span class="text-slate-300">-</span>`}
+                                            </td>
+                                        </tr>
+                                    `).join('')}
+                                </tbody>
+                            </table>
+                        </div>
+                    </div>
+                    
+                    <div class="mt-6 grid grid-cols-2 gap-4">
+                        <div class="bg-orange-50 p-4 rounded-xl border border-orange-100">
+                            <p class="text-orange-600 text-xs font-bold uppercase tracking-wider mb-1">Total Members</p>
+                            <p class="text-2xl font-bold text-slate-800">${reportData.length}</p>
+                        </div>
+                         <div class="bg-emerald-50 p-4 rounded-xl border border-emerald-100">
+                            <p class="text-emerald-600 text-xs font-bold uppercase tracking-wider mb-1">Data Status</p>
+                            <p class="text-lg font-bold text-emerald-700">Live Sync</p>
+                        </div>
+                    </div>
+                </div>
+            `;
+            container.innerHTML = html;
+        }
+
+        // Main Switch Logic
+        async function switchTab(tabName) {
+            currentTab = tabName;
+            
+            // Update Tab UI
+            const tabs = ['delings', 'reports'];
+            tabs.forEach(t => {
+                const btn = document.getElementById(`btn-${t}`);
+                if (t === tabName) {
+                    btn.classList.remove('text-slate-400');
+                    btn.classList.add('text-indigo-600');
+                    btn.querySelector('div').classList.add('bg-indigo-50');
+                } else {
+                    btn.classList.add('text-slate-400');
+                    btn.classList.remove('text-indigo-600');
+                    btn.querySelector('div').classList.remove('bg-indigo-50');
+                }
+            });
+
+            // Clear current content to simulate "reload" visual cue
+            const container = document.getElementById('content-area');
+            container.innerHTML = `
+                <div class="flex flex-col items-center justify-center pt-20 fade-in text-slate-300">
+                    <div class="animate-pulse flex flex-col items-center">
+                        <div class="h-12 w-12 bg-slate-200 rounded-full mb-4"></div>
+                        <div class="h-4 w-32 bg-slate-200 rounded mb-2"></div>
+                        <div class="h-3 w-24 bg-slate-200 rounded"></div>
+                    </div>
+                </div>
+            `;
+
+            // Fetch and Render
+            const data = await fetchSheetData();
+            
+            if (data) {
+                if (tabName === 'delings') {
+                    renderDelings(data);
+                } else {
+                    renderReports(data);
+                }
+            } else {
+                container.innerHTML = `
+                    <div class="bg-red-50 p-6 rounded-xl text-center border border-red-100">
+                        <i data-lucide="wifi-off" class="w-8 h-8 text-red-400 mx-auto mb-3"></i>
+                        <p class="text-red-800 font-medium">Unable to load data.</p>
+                        <button onclick="switchTab('${tabName}')" class="mt-3 text-xs bg-red-100 text-red-700 px-3 py-1.5 rounded-lg font-bold">Retry</button>
+                    </div>
+                `;
+                lucide.createIcons();
+            }
+        }
+
+        // Initialize App
+        document.addEventListener('DOMContentLoaded', () => {
+            switchTab('delings');
+        });
+
+    </script>
+</body>
+</html>
